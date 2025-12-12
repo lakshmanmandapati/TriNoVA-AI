@@ -219,12 +219,22 @@ export async function callTool(toolName, args, options = {}) {
  */
 export async function checkHealth() {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
     const response = await fetch(`${API_BASE_URL}/health`, {
       method: 'GET',
-      timeout: 5000
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     return response.ok;
   } catch (error) {
+    if (error.name === 'AbortError') {
+      console.error('Health check timeout');
+    } else {
+      console.error('Health check failed:', error);
+    }
     return false;
   }
 }

@@ -5,10 +5,16 @@ import Welcome from "./Welcome.jsx";
 import MemoizedChatMessage from "./ChatMessage.jsx";
 import { CustomPromptInput } from "./components/ui/custom-prompt-input.jsx";
 import { UpgradeBanner } from "./components/ui/upgrade-banner.jsx";
-import { conversationAPI, runWebscraper, analyzePrompt, executePlan as executePlanAPI } from "./lib/mcpUtils.js";
+import { conversationAPI, runWebscraper, analyzePrompt, executePlan as executePlanAPI, checkHealth } from "./lib/mcpUtils.js";
 
 // Get API base URL for direct fetch calls
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+
+// Log API URL for debugging (only in development)
+if (import.meta.env.DEV) {
+  console.log('API Base URL:', API_BASE_URL);
+  console.log('VITE_API_BASE_URL env:', import.meta.env.VITE_API_BASE_URL);
+}
 
 const promptSuggestions = [
   "What are you working on?",
@@ -30,6 +36,9 @@ export default function App() {
   const [suggestion, setSuggestion] = useState("");
   const [useStreaming, setUseStreaming] = useState(false);
   
+  // Connection status
+  const [backendConnected, setBackendConnected] = useState(null); // null = checking, true = connected, false = disconnected
+  
   // Conversation sidebar state
   const [currentConversationId, setCurrentConversationId] = useState(null);
   
@@ -42,6 +51,22 @@ export default function App() {
 
   useEffect(() => {
     setSuggestion(promptSuggestions[Math.floor(Math.random() * promptSuggestions.length)]);
+  }, []);
+
+  // Check backend connection on mount
+  useEffect(() => {
+    const checkConnection = async () => {
+      setBackendConnected(null);
+      const isConnected = await checkHealth();
+      setBackendConnected(isConnected);
+      if (!isConnected) {
+        console.error('Backend connection failed. API URL:', API_BASE_URL);
+      }
+    };
+    checkConnection();
+    // Recheck every 30 seconds
+    const interval = setInterval(checkConnection, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -153,11 +178,14 @@ export default function App() {
         
         // Provide more user-friendly error messages
         if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
-            errorMessage = 'Unable to connect to the server. Please check your internet connection and ensure the backend is running.';
+            errorMessage = `Unable to connect to the server at ${API_BASE_URL}. Please check:
+- Your internet connection
+- The backend is running
+- VITE_API_BASE_URL is set correctly (currently: ${import.meta.env.VITE_API_BASE_URL || 'not set, using default'})`;
         } else if (errorMessage.includes('timeout')) {
             errorMessage = 'Request timed out. Please try again.';
         } else if (errorMessage.includes('404')) {
-            errorMessage = 'Backend endpoint not found. Please check your API configuration.';
+            errorMessage = `Backend endpoint not found at ${API_BASE_URL}. Please check your API configuration.`;
         } else if (errorMessage.includes('500')) {
             errorMessage = 'Server error occurred. Please try again later.';
         }
@@ -635,6 +663,31 @@ export default function App() {
     <div className="antialiased bg-white flex h-screen overflow-hidden" style={{ fontFamily: 'Aptos, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
       <ChatHistory chats={chats} activeChatId={activeChatId} setActiveChatId={setActiveChatId} startNewChat={startNewChat} onSettingsClick={() => setIsSettingsOpen(true)} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} />
       <div className={`flex-1 flex flex-col h-screen relative bg-white transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'ml-0' : 'ml-0'}`}>
+        {/* Connection Status Indicator */}
+        {backendConnected === false && (
+          <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+              <span>Backend disconnected. Trying to connect to: {API_BASE_URL}</span>
+            </div>
+            <button 
+              onClick={async () => {
+                setBackendConnected(null);
+                const connected = await checkHealth();
+                setBackendConnected(connected);
+              }}
+              className="text-red-600 hover:text-red-800 underline text-xs"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+        {backendConnected === null && (
+          <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-sm text-yellow-800 flex items-center gap-2">
+            <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
+            <span>Checking backend connection...</span>
+          </div>
+        )}
         <main className={`flex-1 overflow-y-auto transition-all duration-500 ease-in-out ${!hasStartedChat ? 'flex items-center justify-center' : 'pt-6 pb-6'}`}>
           {!hasStartedChat ? (
             <div className="animate-fade-in transition-all duration-500 ease-in-out">
