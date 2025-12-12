@@ -3,6 +3,8 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useState, useRef, useCallback } from 'react';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+
 function cn(...inputs) { return inputs.filter(Boolean).join(" "); }
 
 const TooltipProvider = TooltipPrimitive.Provider;
@@ -234,7 +236,7 @@ export const CustomPromptInput = React.forwardRef(({
       const formData = new FormData();
       formData.append('file', audioBlob, 'recording.webm');
 
-      const response = await fetch('http://localhost:4000/speech-to-text', {
+      const response = await fetch(`${API_BASE_URL}/speech-to-text`, {
         method: 'POST',
         body: formData,
       });

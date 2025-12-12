@@ -688,8 +688,10 @@ def proxy_ai():
         if mcp_url:
             try:
                 print("Fetching tools from MCP server:", mcp_url)
+                # Use request context to get base URL for internal calls
+                base_url = request.host_url.rstrip('/')
                 tools_response = requests.post(
-                    "http://localhost:4000/proxy",
+                    f"{base_url}/proxy",
                     headers={"Content-Type": "application/json"},
                     json={
                         "url": mcp_url,
@@ -1021,8 +1023,10 @@ def proxy_ai_execute():
         for action in actions:
             try:
                 print("Executing action:", action.get("tool"))
+                # Use request context to get base URL for internal calls
+                base_url = request.host_url.rstrip('/')
                 action_response = requests.post(
-                    "http://localhost:4000/proxy",
+                    f"{base_url}/proxy",
                     headers={"Content-Type": "application/json"},
                     json={
                         "url": mcp_url,

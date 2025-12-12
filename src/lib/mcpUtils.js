@@ -58,6 +58,7 @@ export async function analyzePrompt(prompt, options = {}) {
     provider = 'gemini',
     mcpUrl,
     serverName = 'Default',
+    conversation_id,
     timeout = 30000
   } = options;
   
@@ -65,7 +66,8 @@ export async function analyzePrompt(prompt, options = {}) {
     provider,
     prompt,
     mcpUrl,
-    serverName
+    serverName,
+    conversation_id
   }, { timeout });
 }
 

@@ -3,6 +3,8 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+
 // Helper function for class names
 function cn(...inputs) { return inputs.filter(Boolean).join(" "); }
 
@@ -178,7 +180,7 @@ export const PromptBox = React.forwardRef(({ className, ...props }, ref) => {
     formData.append('file', audioBlob, 'recording.webm');
 
     try {
-      const response = await fetch('http://localhost:4000/speech-to-text', {
+      const response = await fetch(`${API_BASE_URL}/speech-to-text`, {
         method: 'POST',
         body: formData,
       });

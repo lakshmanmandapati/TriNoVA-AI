@@ -5,7 +5,10 @@ import Welcome from "./Welcome.jsx";
 import MemoizedChatMessage from "./ChatMessage.jsx";
 import { CustomPromptInput } from "./components/ui/custom-prompt-input.jsx";
 import { UpgradeBanner } from "./components/ui/upgrade-banner.jsx";
-import { conversationAPI, runWebscraper } from "./lib/mcpUtils.js";
+import { conversationAPI, runWebscraper, analyzePrompt, executePlan as executePlanAPI } from "./lib/mcpUtils.js";
+
+// Get API base URL for direct fetch calls
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
 
 const promptSuggestions = [
   "What are you working on?",
@@ -15,7 +18,7 @@ const promptSuggestions = [
 ];
 
 export default function App() {
-  const [url, setUrl] = useState("https://mcp.zapier.com/api/mcp/s/NjMwZDhjNDQtZTRkYy00YzY3LWIyNGYtZDZhYmIxNThlMjlmOmIxODkzODYyLWY5ZWMtNGY1MC1hZGQ5LWVjYThlYjhiYzRjNA==/mcp");
+  const [url, setUrl] = useState("https://mcp.zapier.com/api/mcp/s/ZmMyMDA1NjItNWRiYy00YzNlLTkwMTAtYTcxN2VjNzM5YWNmOjZjMjUwY2ExLWRiYWItNGQxMS1hZDEzLWRlNDYwYzgwYzQzZg==/mcp");
   const [userPrompt, setUserPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState("gemini");
@@ -146,11 +149,24 @@ export default function App() {
         await handleRegularResponse(currentPrompt, currentChatId, thinkingMessage.id);
       }
     } catch (err) {
-        const errorMessage = {id: Date.now(), role: 'error', content: `Failed to analyze prompt: ${err.message}`, type: 'text', timestamp: new Date()};
+        let errorMessage = err.message || 'Unknown error occurred';
+        
+        // Provide more user-friendly error messages
+        if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+            errorMessage = 'Unable to connect to the server. Please check your internet connection and ensure the backend is running.';
+        } else if (errorMessage.includes('timeout')) {
+            errorMessage = 'Request timed out. Please try again.';
+        } else if (errorMessage.includes('404')) {
+            errorMessage = 'Backend endpoint not found. Please check your API configuration.';
+        } else if (errorMessage.includes('500')) {
+            errorMessage = 'Server error occurred. Please try again later.';
+        }
+        
+        const errorMsg = {id: Date.now(), role: 'error', content: `Failed to analyze prompt: ${errorMessage}`, type: 'text', timestamp: new Date()};
         setChats(prev => {
             const newChats = { ...prev };
             const updatedMessages = newChats[currentChatId].messages.filter(msg => msg.id !== thinkingMessage.id);
-            updatedMessages.push(errorMessage);
+            updatedMessages.push(errorMsg);
             newChats[currentChatId] = { ...newChats[currentChatId], messages: updatedMessages };
             return newChats;
         });
@@ -238,19 +254,12 @@ export default function App() {
       }
     }
 
-    const response = await fetch("http://localhost:4000/proxy/ai", {
-      method: "POST", 
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        provider: selectedProvider, 
-        prompt: prompt, 
-        mcpUrl: url,
-        serverName: "Default",
-        conversation_id: conversationId // Add conversation tracking
-      })
+    const data = await analyzePrompt(prompt, {
+      provider: selectedProvider,
+      mcpUrl: url,
+      serverName: "Default",
+      conversation_id: conversationId
     });
-    
-    const data = await response.json();
     
     // Update conversation ID if returned from backend
     if (data.conversation_id && data.conversation_id !== conversationId) {
@@ -328,7 +337,7 @@ export default function App() {
       }
     }
 
-    const response = await fetch("http://localhost:4000/proxy/stream", {
+    const response = await fetch(`${API_BASE_URL}/proxy/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -458,7 +467,7 @@ export default function App() {
 
     try {
       const conversationId = chats[chatId]?.conversationId;
-      const response = await fetch("http://localhost:4000/proxy/ai/execute", {
+      const response = await fetch(`${API_BASE_URL}/proxy/ai/execute`, {
         method: "POST", 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
