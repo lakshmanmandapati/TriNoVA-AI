@@ -37,16 +37,51 @@ allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127
 CORS(app, origins=allowed_origins)
 
 # Make sure the path to your key is correct relative to where you run the script
-CREDENTIALS_PATH = "server/gcp_key.json"
+# Try multiple possible paths for gcp_key.json
+CREDENTIALS_PATH = None
+possible_paths = [
+    "server/gcp_key.json",
+    "gcp_key.json",
+    os.path.join(os.path.dirname(__file__), "gcp_key.json"),
+    os.path.join(ROOT_DIR, "gcp_key.json"),
+]
+
+# Also check for base64 encoded credentials in environment variable
+GOOGLE_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64")
 
 client = None
 try:
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = CREDENTIALS_PATH
-    client = speech.SpeechClient()
-    print("✅ Google Cloud Speech client initialized successfully.")
+    # First, try to use base64 encoded credentials from environment
+    if GOOGLE_CREDENTIALS_BASE64:
+        import base64
+        import json
+        from google.oauth2 import service_account
+        
+        decoded_key = base64.b64decode(GOOGLE_CREDENTIALS_BASE64).decode('utf-8')
+        credentials_info = json.loads(decoded_key)
+        credentials = service_account.Credentials.from_service_account_info(credentials_info)
+        client = speech.SpeechClient(credentials=credentials)
+        print("✅ Google Cloud Speech client initialized successfully from environment variable.")
+    else:
+        # Try to find the key file
+        for path in possible_paths:
+            if os.path.exists(path):
+                CREDENTIALS_PATH = path
+                break
+        
+        if CREDENTIALS_PATH:
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = CREDENTIALS_PATH
+            client = speech.SpeechClient()
+            print("✅ Google Cloud Speech client initialized successfully.")
+        else:
+            print("⚠️ WARNING: gcp_key.json not found. Speech-to-text functionality will be disabled.")
+            print("   To enable it, either:")
+            print("   1. Place gcp_key.json in the server/ directory, or")
+            print("   2. Set GOOGLE_APPLICATION_CREDENTIALS_BASE64 environment variable")
 except Exception as e:
-    print(f"❌ FATAL ERROR: Could not initialize Google Cloud client. Check your gcp_key.json path and content.")
-    print(f"DETAILS: {e}")
+    print(f"⚠️ WARNING: Could not initialize Google Cloud client. Speech-to-text will be disabled.")
+    print(f"   DETAILS: {e}")
+    client = None
 
 # Your Modal endpoint URL - replace with your actual Modal endpoint
 MODAL_ENDPOINT = "https://imadabathuniharsha--llama3-serve-optimized-model-web-generate.modal.run"
@@ -309,7 +344,7 @@ def proxy_stream():
                 },
                 json=payload,
                 stream=True,
-                timeout=60
+                timeout=120
             )
             
             content_type = response.headers.get('content-type', '')
@@ -464,7 +499,7 @@ def proxy():
                 **headers
             },
             json=payload,
-            timeout=60
+            timeout=120
         )
         
         print("📊 Response Status:", response.status_code, response.reason)
@@ -590,7 +625,7 @@ def proxy_ai():
                     MODAL_ENDPOINT,
                     headers={"Content-Type": "application/json"},
                     json={"prompt": prompt},
-                    timeout=60
+                    timeout=120
                 )
                 
                 if modal_response.status_code == 200:
@@ -795,7 +830,7 @@ def proxy_ai():
             endpoint,
             headers=headers,
             json=body,
-            timeout=60
+            timeout=120
         )
         
         if not response.ok:
@@ -995,7 +1030,7 @@ def proxy_ai_execute():
                         "toolName": action.get("tool"),
                         "args": action.get("parameters", {})
                     },
-                    timeout=60
+                    timeout=120
                 )
                 
                 action_result = action_response.json()
@@ -1053,7 +1088,7 @@ def handle_chat_mode(provider, prompt, api_keys, conversation_history=None):
                     MODAL_ENDPOINT,
                     headers={"Content-Type": "application/json"},
                     json={"prompt": prompt},
-                    timeout=60
+                    timeout=120
                 )
                 
                 if modal_response.status_code == 200:
@@ -1132,7 +1167,7 @@ def handle_chat_mode(provider, prompt, api_keys, conversation_history=None):
             endpoint,
             headers=headers,
             json=body,
-            timeout=60
+            timeout=120
         )
         
         if not response.ok:
@@ -1327,6 +1362,24 @@ def update_conversation_title(conversation_id):
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "ok", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+
+# Root endpoint to prevent 404 errors
+@app.route('/', methods=['GET'])
+def root():
+    return jsonify({
+        "status": "ok",
+        "message": "MCP Proxy Server is running",
+        "endpoints": {
+            "health": "/health",
+            "proxy": "/proxy",
+            "proxy_stream": "/proxy/stream",
+            "proxy_ai": "/proxy/ai",
+            "speech_to_text": "/speech-to-text",
+            "webscraper": "/webscraper/research",
+            "conversations": "/conversations"
+        },
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    })
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 4000))
